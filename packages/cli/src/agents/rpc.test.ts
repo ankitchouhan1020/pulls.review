@@ -60,6 +60,7 @@ describe('agent RPC', () => {
     expect(await call(functions, LOCAL_RPC.agentList)).toEqual([
       expect.objectContaining({ name: 'claude', models: expect.arrayContaining([{ id: 'sonnet', name: 'Sonnet (latest)' }]) }),
       expect.objectContaining({ name: 'opencode' }),
+      expect.objectContaining({ name: 'pi' }),
     ])
   })
 

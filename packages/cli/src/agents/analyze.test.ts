@@ -1,6 +1,6 @@
 import type { AgentStreamEvent } from '@pulls.review/core/local-rpc'
 import type { DiffsPayload } from '@pulls.review/core/types'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AGENT_SESSION_LOST } from '@pulls.review/core/local-rpc'
@@ -11,6 +11,7 @@ import { runAgentChat } from './chat'
 import { claude } from './claude'
 import { detectAgents } from './index'
 import { opencode } from './opencode'
+import { pi } from './pi'
 
 const diff: DiffsPayload = {
   ref: { kind: 'local', repo: '/repo', target: 'main...feat' },
@@ -46,6 +47,7 @@ describe('detectAgents', () => {
     expect(await detectAgents()).toEqual([
       { name: 'claude', label: 'Claude Code', version: '0.0.0-fake', models: expect.arrayContaining([{ id: 'sonnet', name: 'Sonnet (latest)' }]) },
       { name: 'opencode', label: 'OpenCode', version: '0.0.0-fake', models: [] },
+      { name: 'pi', label: 'Pi', version: '0.0.0-fake', models: [] },
     ])
   })
 })
@@ -61,7 +63,7 @@ describe('runAgentAnalysis', () => {
     expect(call!.args).not.toContain('--resume')
     expect(call!.args[call!.args.indexOf('--system-prompt') + 1]).toContain(join(dir, 'patches'))
     expect(call!.stdin).toContain('---MANIFEST---')
-    expect(call!.cwd).toBe(dir)
+    expect(realpathSync(call!.cwd)).toBe(realpathSync(dir))
 
     expect(kinds()).toEqual(['messages', 'progress', 'messages', 'progress', 'messages', 'messages', 'progress', 'progress', 'result', 'end'])
     expect(events.filter(event => event.kind === 'progress').map(event => event.progress)).toEqual([
@@ -116,6 +118,35 @@ describe('runAgentAnalysis', () => {
     expect(result()).toMatchObject({ model: 'opencode/vercel/anthropic/claude-sonnet-4.5', groups: [{ key: 'thing' }] })
   })
 
+  it('runs pi with its existing credentials, a persistent session and read-only tools', async () => {
+    fake.replay('pi-analysis.jsonl')
+    const previous = { provider: process.env.PI_PROVIDER, model: process.env.PI_MODEL }
+    process.env.PI_PROVIDER = 'session-provider'
+    process.env.PI_MODEL = 'session-model'
+    try {
+      await runAgentAnalysis({ ...options(), cli: pi })
+    }
+    finally {
+      if (previous.provider === undefined)
+        delete process.env.PI_PROVIDER
+      else
+        process.env.PI_PROVIDER = previous.provider
+      if (previous.model === undefined)
+        delete process.env.PI_MODEL
+      else
+        process.env.PI_MODEL = previous.model
+    }
+
+    const [call] = fake.calls()
+    expect(call!.args).toEqual(expect.arrayContaining(['--mode', 'json', '--session-id', expect.any(String), '--tools', 'read,grep,find,ls', '--provider', 'session-provider', '--model', 'session-model']))
+    expect(call!.args).not.toContain('--api-key')
+    expect(call!.args).not.toContain('--no-extensions')
+    expect(call!.args[call!.args.indexOf('--system-prompt') + 1]).toContain('<schema>')
+    expect(call!.stdin).toContain('---MANIFEST---')
+    expect(result()).toMatchObject({ model: 'pi/anthropic/claude-sonnet-4-5', groups: [{ key: 'thing' }] })
+    expect(events.at(-1)).toEqual({ kind: 'end', stopReason: 'done', agent: { agent: 'pi', id: 'sess-pi-1', model: 'anthropic/claude-sonnet-4-5' } })
+  })
+
   it('runs a GitHub diff in a scratch directory, not the repository', async () => {
     fake.replay('opencode-analysis.jsonl')
 
@@ -153,6 +184,18 @@ describe('runAgentChat', () => {
     const transcript = events.findLast(event => event.kind === 'messages')!.messages
     expect(transcript.map(message => message.role)).toEqual(['user', 'user', 'assistant'])
     expect(events.at(-1)).toEqual({ kind: 'end', stopReason: 'done', agent: { agent: 'opencode', id: 'ses_oc1' } })
+  })
+
+  it('resumes a pi session for follow-up chat', async () => {
+    fake.replay('pi-chat-answer.jsonl')
+    const piSession = { ...session, agent: { agent: 'pi' as const, id: 'sess-pi-1' } }
+
+    await runAgentChat({ ...options(), cli: pi, session: piSession, text: 'why?' })
+
+    const [call] = fake.calls()
+    expect(call!.args).toEqual(expect.arrayContaining(['--mode', 'json', '--session', 'sess-pi-1']))
+    expect(call!.args).not.toContain('--session-id')
+    expect(events.at(-1)).toEqual({ kind: 'end', stopReason: 'done', agent: { agent: 'pi', id: 'sess-pi-1', model: 'anthropic/claude-sonnet-4-5' } })
   })
 
   it('applies a fenced grouping in the reply like update_grouping', async () => {

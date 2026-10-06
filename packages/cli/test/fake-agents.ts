@@ -10,12 +10,12 @@ export const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${nam
 export interface FakeCall { args: string[], stdin: string, cwd: string }
 
 /**
- * Puts `claude` and `opencode` on `PATH` as scripts replaying fixture streams (`fake-agent.mjs`),
- * so the adapters run their real spawn-and-parse path against a known stream.
+ * Puts the supported agent CLIs on `PATH` as scripts replaying fixture streams
+ * (`fake-agent.mjs`), so the adapters run their real spawn-and-parse path against a known stream.
  */
 export function installFakeAgents() {
   const dir = mkdtempSync(join(tmpdir(), 'pulls-review-fake-agent-'))
-  for (const name of ['claude', 'opencode']) {
+  for (const name of ['claude', 'opencode', 'pi']) {
     writeFileSync(join(dir, name), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`)
     chmodSync(join(dir, name), 0o755)
   }

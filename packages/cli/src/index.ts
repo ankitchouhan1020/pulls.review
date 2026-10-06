@@ -26,7 +26,7 @@ Target (GitHub):
   Uses the GitHub token from GITHUB_TOKEN, else from \`gh auth token\`.
 
 AI analysis uses a key from Settings, or a coding agent installed here (Claude
-Code, OpenCode) when "Local agent" is the provider in Settings.
+Code, OpenCode, Pi) when "Local agent" is the provider in Settings.
 
 Options:
   --worktree     open the uncommitted changes against HEAD

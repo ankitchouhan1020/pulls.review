@@ -27,6 +27,7 @@ const emit = defineEmits<{
 const AGENT_ICONS: Record<LocalAgentName, string> = {
   claude: 'i-simple-icons-claudecode',
   opencode: 'i-simple-icons-opencode',
+  pi: 'i-ph:terminal-window-duotone',
 }
 
 // The list portals into this field rather than `document.body`, where `z-dropdown` would
@@ -98,6 +99,9 @@ const agentModel = computed({
         </template>
         <template #opencode>
           <a href="https://opencode.ai" target="_blank" rel="noopener" class="hover:underline">OpenCode</a>
+        </template>
+        <template #pi>
+          <a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener" class="hover:underline">Pi</a>
         </template>
       </i18n-t>
     </template>

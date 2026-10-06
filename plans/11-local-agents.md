@@ -1,19 +1,20 @@
 # Plan 11: analyze with a local agent CLI (`pulls.review` CLI)
 
-Status: **built** for `claude` (Claude Code) and `opencode` (OpenCode); `codex` and
-`gemini` are not adapted yet. Builds on Plan 09 (the `pulls.review` server and the
+Status: **built** for `claude` (Claude Code), `opencode` (OpenCode), and `pi` (Pi);
+`codex` and `gemini` are not adapted yet. Builds on Plan 09 (the `pulls.review` server and the
 `PR_LOCAL` build). Nothing here touches the site or `@pulls.review/actions`.
 
 What was verified live: OpenCode end to end (analysis, chat, a regroup from chat,
 `--session` resume, `Session not found` on a lost session). Claude Code accepted every
 flag in the table but its API was unreachable from the sandbox, so its fixture is
-authored from the shapes its stream did print (`system`/`assistant`/`result`).
+authored from the shapes its stream did print (`system`/`assistant`/`result`). Pi was
+verified with its inherited provider/model, JSON stream, and session resume.
 
 ## Why
 
 The site and the CLI analyze in the browser with an API key the user types into
 Settings. On a developer machine that key usually already exists in another form:
-a coding agent (`claude`, `codex`, `opencode`, `gemini`) signed in with a
+a coding agent (`claude`, `codex`, `opencode`, `gemini`, `pi`) signed in with a
 subscription. Those agents also sit in the repository, so for a local target they
 can open the full files the patch only hints at, not just the hunks.
 
@@ -27,7 +28,7 @@ path stays the default.
 - Settings, LLM section: a fourth provider, **Local agent**, next to AI Gateway,
   Anthropic and OpenAI-compatible. Inside it, where the other three show a key
   field, it shows an **agent** choice - the CLIs the server found on `PATH`
-  (`Claude Code`, `OpenCode`), each with its version - and
+  (`Claude Code`, `OpenCode`, `Pi`), each with its version - and
   below it the same `ModelPicker` the other providers use, fed by that agent's
   model catalog, with "agent default" as the first entry. No key is asked for.
   With no agent found, the provider explains what it looks for and links the
@@ -85,7 +86,7 @@ agent: LocalAgentName | '' // '' until the user picks one
 agentModel: string // '' = the agent's own default
 ```
 
-`LocalAgentName` is `'claude' | 'opencode'` (`LOCAL_AGENT_NAMES` in core), the adapter
+`LocalAgentName` is `'claude' | 'opencode' | 'pi'` (`LOCAL_AGENT_NAMES` in core), the adapter
 ids below, defined in core so the settings, the RPC schemas and the server agree.
 Switching agent resets `agentModel` to `''`, since one agent's model ids mean
 nothing to another.
@@ -159,16 +160,17 @@ model), `assistant` (text and tool-call parts), `toolResult` (tool name, is-erro
 a short text), `final` (the last text or structured output), `exit` (code,
 stderr tail). The mapping is the whole adapter; nothing else knows a CLI's output
 format. The prompt goes in on stdin (a manifest with diffs is far beyond an
-argument's size); `claude` takes the system prompt by flag, `opencode` gets it
-prepended to the message. The built rows are verified; `codex` and `gemini` are
+argument's size); `claude` and `pi` take the system prompt by flag, while `opencode`
+gets it prepended to the message. The built rows are verified; `codex` and `gemini` are
 starting points for their adapters:
 
-| CLI      | Headless                | Streaming events                        | Structured answer                | Resume                   | Read-only                                                            | Model                                                                                 |
-| -------- | ----------------------- | --------------------------------------- | -------------------------------- | ------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| claude   | `claude -p <prompt>`    | `--output-format stream-json --verbose` | `--json-schema <schema>`         | `--resume <id>`          | `--allowedTools Read Grep Glob` and `--disallowedTools` for the rest | `--model <alias or id>`; no list command: static catalog of `sonnet`, `opus`, `haiku` |
-| codex    | `codex exec <prompt>`   | `--json`                                | `--output-schema <file>`         | `codex exec resume <id>` | `--sandbox read-only`                                                | `-m <id>`; no list command: static catalog                                            |
-| opencode | `opencode run <prompt>` | `--format json`                         | parsed from the last fenced JSON | `--session <id>`         | `--agent plan`                                                       | `-m <provider/model>`; `opencode models` lists the signed-in catalog                  |
-| gemini   | `gemini -p <prompt>`    | `--output-format stream-json`           | parsed from the last fenced JSON | to verify                | to verify                                                            | `-m <id>`; static catalog                                                             |
+| CLI      | Headless                  | Streaming events                        | Structured answer                | Resume                   | Read-only                                                            | Model                                                                                 |
+| -------- | ------------------------- | --------------------------------------- | -------------------------------- | ------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| claude   | `claude -p <prompt>`      | `--output-format stream-json --verbose` | `--json-schema <schema>`         | `--resume <id>`          | `--allowedTools Read Grep Glob` and `--disallowedTools` for the rest | `--model <alias or id>`; no list command: static catalog of `sonnet`, `opus`, `haiku` |
+| codex    | `codex exec <prompt>`     | `--json`                                | `--output-schema <file>`         | `codex exec resume <id>` | `--sandbox read-only`                                                | `-m <id>`; no list command: static catalog                                            |
+| opencode | `opencode run <prompt>`   | `--format json`                         | parsed from the last fenced JSON | `--session <id>`         | `--agent plan`                                                       | `-m <provider/model>`; `opencode models` lists the signed-in catalog                  |
+| pi       | stdin to `pi --mode json` | JSON session events                     | parsed from the last fenced JSON | `--session <id>`         | `--tools read,grep,find,ls`                                          | inherited Pi provider/model; `--model <id>` overrides it                              |
+| gemini   | `gemini -p <prompt>`      | `--output-format stream-json`           | parsed from the last fenced JSON | to verify                | to verify                                                            | `-m <id>`; static catalog                                                             |
 
 Every CLI gets the JSON schema in the system prompt and ends with one fenced
 ` ```json ` block, which the server parses; `claude` additionally validates it
@@ -237,7 +239,7 @@ Stop button aborts a run that hangs.
 ## Testing
 
 - **Adapters and drivers.** `packages/cli/test/fake-agent.mjs` stands in for
-  `claude` and `opencode` on `PATH`: it records how it was called (arguments,
+  `claude`, `opencode`, and `pi` on `PATH`: it records how it was called (arguments,
   stdin, cwd), replays a fixture stream from `test/fixtures/` (one per call) and
   exits as told. The adapters' real spawn-and-parse path runs against it, so the
   tests cover the flags, the prompt, progress, the coverage retry in the same
@@ -268,8 +270,9 @@ Done unless marked.
    group and model picker over the injected agent list, disabled with a note
    outside `PR_LOCAL`; the `PR_LOCAL` RPC runner.
 6. Chat: `agent.chat`, the grouping rule in the chat prompt, session-lost.
-7. Adapters for `opencode` (done: `opencode models` parsed), `codex` and `gemini`
-   (**open**), each with a fixture and its catalog.
+7. Adapters for `opencode` (done: `opencode models` parsed), `pi` (done: inherited
+   provider/model and resumable JSON sessions), `codex` and `gemini` (**open**), each
+   with a fixture and its catalog.
 8. Docs: `01-architecture.md` (the `LlmRunner` seam, the agent provider), Plan 09's
    "env LLM keys over RPC" line, the CLI README.
 
