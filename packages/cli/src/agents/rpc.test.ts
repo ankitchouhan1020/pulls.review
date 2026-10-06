@@ -1,7 +1,7 @@
 import type { AgentStreamEvent } from '@pulls.review/core/local-rpc'
 import type { DiffsPayload } from '@pulls.review/core/types'
 import type { AgentChannel } from './rpc'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LOCAL_RPC } from '@pulls.review/core/local-rpc'
@@ -76,6 +76,26 @@ describe('agent RPC', () => {
     expect(events.at(-1)).toMatchObject({ kind: 'end', stopReason: 'done' })
     expect(events.find(event => event.kind === 'result')?.result.groups).toHaveLength(1)
     expect(fake.calls()[0]!.cwd).not.toBe(dir)
+  })
+
+  it('keeps the same GitHub workspace when pi resumes analysis for chat', async () => {
+    fake.replay('pi-analysis.jsonl', 'pi-chat-answer.jsonl')
+    const { channel, stream } = memoryChannel()
+    const functions = agentRpcFunctions({ cwd: dir, patchDir: join(dir, 'patches'), channel })
+
+    const analysis = await call(functions, LOCAL_RPC.agentAnalyze, { agent: 'pi', diff, locale: 'en' }) as { streamId: string }
+    await stream(analysis.streamId).done
+    const analyzed = stream(analysis.streamId).events
+    const session = {
+      messages: analyzed.findLast(event => event.kind === 'messages')!.messages,
+      chatStartIndex: 0,
+      agent: analyzed.findLast(event => event.kind === 'end')!.agent,
+    }
+    const chat = await call(functions, LOCAL_RPC.agentChat, { agent: 'pi', diff, locale: 'en', session, text: 'why?' }) as { streamId: string }
+    await stream(chat.streamId).done
+
+    expect(fake.calls().map(call => realpathSync(call.cwd))).toEqual([realpathSync(join(dir, 'patches', 'workspace')), realpathSync(join(dir, 'patches', 'workspace'))])
+    expect(stream(chat.streamId).events.at(-1)).toMatchObject({ kind: 'end', stopReason: 'done' })
   })
 
   it('ends a failed run with its error, and an aborted one as aborted', async () => {

@@ -2,8 +2,7 @@ import type { LlmSession } from '@pulls.review/core/cache'
 import type { AgentStreamEvent } from '@pulls.review/core/local-rpc'
 import type { AgentChatOptions } from './chat'
 import type { AgentRunOptions } from './run'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { LOCAL_AGENT_NAMES } from '@pulls.review/core/analyze'
 import { AGENT_SESSION_LOST, LOCAL_RPC, LocalAgentInfoSchema } from '@pulls.review/core/local-rpc'
@@ -57,9 +56,12 @@ export function agentRpcFunctions({ cwd, patchDir, channel }: AgentRpcOptions) {
     sink.signal.addEventListener('abort', () => controller.abort())
 
     void (async () => {
-      // A GitHub diff is analyzed from its patch alone, in a scratch dir, not in whatever is checked out here.
+      // A GitHub diff is analyzed from its patch alone, not in whatever is checked out here.
+      // The workspace stays stable so CLIs that scope sessions by cwd can resume chat.
       const local = args.diff.ref.kind === 'local'
-      const scratch = local ? undefined : await mkdtemp(join(tmpdir(), 'pulls-review-agent-'))
+      const scratch = local ? undefined : join(patchDir, 'workspace')
+      if (scratch)
+        await mkdir(scratch, { recursive: true })
       try {
         await run({
           cli: agents[args.agent],
@@ -83,8 +85,6 @@ export function agentRpcFunctions({ cwd, patchDir, channel }: AgentRpcOptions) {
       finally {
         running.delete(sink.id)
         sink.close()
-        if (scratch)
-          await rm(scratch, { recursive: true, force: true })
       }
     })()
     return { streamId: sink.id }
