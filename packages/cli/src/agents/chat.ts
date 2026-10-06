@@ -54,7 +54,7 @@ export async function runAgentChat({ cli, model, diff, locale, cwd, patchDir, em
       : [...session.messages, { role: 'user', content: text, timestamp: Date.now() }]
     emit({ kind: 'messages', messages: [...transcript] })
 
-    const outcome = await runTurn(cli, { cwd, system, prompt: message, model, resume: resume.id }, transcript, { emit, signal, cwd, model, step: 1 })
+    const outcome = await runTurn(cli, { cwd, system, prompt: message, model, resume: resume.id, sessionDir: patchDir }, transcript, { emit, signal, cwd, model, step: 1 })
     const answer = parseJsonAnswer(outcome.final?.text)
     if (answer !== undefined) {
       stripGrouping(transcript)

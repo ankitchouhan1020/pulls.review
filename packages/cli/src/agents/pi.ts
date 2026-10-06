@@ -23,6 +23,8 @@ function args(input: AgentRunInput, sessionId: string): string[] {
     '--no-context-files',
     '--no-approve',
   ]
+  if (input.sessionDir)
+    list.push('--session-dir', input.sessionDir)
   if (input.model) {
     list.push('--model', input.model)
   }
@@ -72,7 +74,7 @@ function finalEvent(state: PiRunState): AgentCliEvent {
 }
 
 function isLostSession(stderr: string): boolean {
-  return /session.*not found/i.test(stderr) || /no session found/i.test(stderr) || /session.*does not exist/i.test(stderr)
+  return /session.*not found/i.test(stderr) || /no session found/i.test(stderr) || /session.*does not exist/i.test(stderr) || /session found in different project/i.test(stderr)
 }
 
 function messageEvents(value: unknown, state: PiRunState): AgentCliEvent[] {

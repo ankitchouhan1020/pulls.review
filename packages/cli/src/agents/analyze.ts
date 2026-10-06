@@ -35,13 +35,13 @@ export async function runAgentAnalysis({ cli, model, diff, locale, cwd, patchDir
     emit({ kind: 'messages', messages: [...transcript] })
     const turn = { emit, signal, cwd, model }
 
-    let outcome = await runTurn(cli, { cwd, system, prompt, model }, transcript, { ...turn, step: 1 })
+    let outcome = await runTurn(cli, { cwd, system, prompt, model, sessionDir: patchDir }, transcript, { ...turn, step: 1 })
     let answer = checkAnswer(diff, outcome.final?.structured ?? parseJsonAnswer(outcome.final?.text))
     if ('fix' in answer) {
       if (!outcome.session)
         throw new AgentRunError(answer.fix)
       transcript.push({ role: 'user', content: answer.fix, timestamp: Date.now() })
-      const retry = await runTurn(cli, { cwd, system, prompt: answer.fix, model, resume: outcome.session.id }, transcript, { ...turn, step: 2 })
+      const retry = await runTurn(cli, { cwd, system, prompt: answer.fix, model, resume: outcome.session.id, sessionDir: patchDir }, transcript, { ...turn, step: 2 })
       outcome = { session: retry.session ?? outcome.session, final: retry.final }
       answer = checkAnswer(diff, outcome.final?.structured ?? parseJsonAnswer(outcome.final?.text))
       if ('fix' in answer)

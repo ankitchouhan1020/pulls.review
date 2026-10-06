@@ -138,7 +138,7 @@ describe('runAgentAnalysis', () => {
     }
 
     const [call] = fake.calls()
-    expect(call!.args).toEqual(expect.arrayContaining(['--mode', 'json', '--session-id', expect.any(String), '--tools', 'read,grep,find,ls', '--provider', 'session-provider', '--model', 'session-model']))
+    expect(call!.args).toEqual(expect.arrayContaining(['--mode', 'json', '--session-id', expect.any(String), '--tools', 'read,grep,find,ls', '--session-dir', join(dir, 'patches'), '--provider', 'session-provider', '--model', 'session-model']))
     expect(call!.args).not.toContain('--api-key')
     expect(call!.args).not.toContain('--no-extensions')
     expect(call!.args[call!.args.indexOf('--system-prompt') + 1]).toContain('<schema>')
@@ -196,6 +196,14 @@ describe('runAgentChat', () => {
     expect(call!.args).toEqual(expect.arrayContaining(['--mode', 'json', '--session', 'sess-pi-1']))
     expect(call!.args).not.toContain('--session-id')
     expect(events.at(-1)).toEqual({ kind: 'end', stopReason: 'done', agent: { agent: 'pi', id: 'sess-pi-1', model: 'anthropic/claude-sonnet-4-5' } })
+  })
+
+  it('reports a pi session created in a different scratch directory as lost', async () => {
+    fake.replay()
+    fake.exitWith(0, 'Session found in different project: /tmp/old-scratch\n')
+    const piSession = { ...session, agent: { agent: 'pi' as const, id: 'sess-pi-1' } }
+
+    await expect(runAgentChat({ ...options(), cli: pi, session: piSession, text: 'why?' })).rejects.toMatchObject({ code: AGENT_SESSION_LOST })
   })
 
   it('applies a fenced grouping in the reply like update_grouping', async () => {

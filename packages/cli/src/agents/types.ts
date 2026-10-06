@@ -12,6 +12,8 @@ export interface AgentRunInput {
   model?: string
   /** A session id to continue. */
   resume?: string
+  /** Stable storage for CLIs whose session lookup is scoped to the working directory. */
+  sessionDir?: string
   signal: AbortSignal
 }
 
